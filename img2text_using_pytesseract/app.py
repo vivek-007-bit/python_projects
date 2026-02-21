@@ -6,7 +6,9 @@ import os
 app = Flask(__name__)
 
 #SET TESSERACT PATH 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+pytesseract.pytesseract.tesseract_cmd = os.getenv(
+    "TESSERACT_PATH", "/usr/bin/tesseract"
+)
 
 #Upload configuration
 UPLOAD_FOLDER = "static/uploads"
@@ -63,4 +65,5 @@ def home():
 
 
 if __name__ == "__main__":
+
     app.run(debug=True, port=8000)
