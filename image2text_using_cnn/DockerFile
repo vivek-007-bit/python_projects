@@ -1,0 +1,31 @@
+# Base Python Image
+FROM python:3.11-slim
+
+# Prevent python from buffering logs
+ENV PYTHONUNBUFFERED=1
+
+# Set working directory
+WORKDIR /app
+
+
+# System dependencies (OpenCV needs this)
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# Install Python dependencies
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy project files
+COPY . .
+
+
+# Expose port (Render assigns dynamically)
+EXPOSE 10000
+
+
+# Start production server
+CMD ["gunicorn", "--bind", "0.0.0.0:10000", "app:app"]
