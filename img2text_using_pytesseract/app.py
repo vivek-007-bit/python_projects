@@ -66,6 +66,7 @@ def home():
                 # OCR with timeout
                 extracted_text = pytesseract.image_to_string(
                     img,
+                    lang="eng+jpn+hin",
                     config="--psm 6",
                     timeout=20
                 )
@@ -93,3 +94,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 10000))
     )
+
