@@ -8,6 +8,8 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
+    tesseract-ocr-jpn \
+    tesseract-ocr-hin \
     libgl1 \
     build-essential \
     && apt-get clean \
@@ -34,3 +36,4 @@ EXPOSE 10000
 
 # Start application with Gunicorn
 CMD ["gunicorn", "--workers", "2", "--threads", "2", "--bind", "0.0.0.0:10000", "app:app"]
+
