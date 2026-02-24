@@ -5,6 +5,7 @@ import cv2
 import os
 import uuid
 import shutil
+import threading
 
 app = Flask(__name__)
 
@@ -16,75 +17,75 @@ else:
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 UPLOAD_FOLDER = "static/uploads"
-MAX_FILE_SIZE = 5 * 1024 * 1024
-
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+results = {}
 
 def preprocess_image(path):
     img = cv2.imread(path)
 
-    if img is None:
-        raise ValueError("Invalid image file")
-
     h, w = img.shape[:2]
-    max_dim = 800
+    max_dim = 700
 
     if max(h, w) > max_dim:
         scale = max_dim / max(h, w)
         img = cv2.resize(img, None, fx=scale, fy=scale)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    _, thresh = cv2.threshold(
-        gray,
-        0,
-        255,
-        cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
+    _, thresh = cv2.threshold(gray, 0, 255,
+                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     return Image.fromarray(thresh)
 
+def run_ocr(task_id, filepath):
+    try:
+        img = preprocess_image(filepath)
+
+        text = pytesseract.image_to_string(
+            img,
+            lang="eng",
+            config="--oem 3 --psm 7"
+        )
+
+        results[task_id] = text
+
+    except Exception as e:
+        results[task_id] = f"Error: {str(e)}"
+
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
 @app.route("/", methods=["GET", "POST"])
 def home():
-    extracted_text = None
-
     if request.method == "POST":
         file = request.files.get("image")
 
         if file and file.filename:
-            filename = f"{uuid.uuid4().hex}_{file.filename}"
-            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            task_id = uuid.uuid4().hex
+            filepath = os.path.join(
+                app.config["UPLOAD_FOLDER"],
+                f"{task_id}_{file.filename}"
+            )
 
             file.save(filepath)
 
-            try:
-                processed_img = preprocess_image(filepath)
+            results[task_id] = "Processing..."
 
-                extracted_text = pytesseract.image_to_string(
-                    processed_img,
-                    lang="eng",
-                    config="--oem 3 --psm 6",
-                    timeout=10
-                )
+            threading.Thread(
+                target=run_ocr,
+                args=(task_id, filepath)
+            ).start()
 
-            except RuntimeError:
-                extracted_text = "OCR timeout. Try smaller or clearer image."
+            return render_template(
+                "index.html",
+                extracted_text="Processing... refresh page in a few seconds."
+            )
 
-            except Exception as e:
-                extracted_text = f"Error: {str(e)}"
-
-            finally:
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-
-    return render_template(
-        "index.html",
-        extracted_text=extracted_text
-    )
+    return render_template("index.html", extracted_text=None)
 
 if __name__ == "__main__":
     app.run(
