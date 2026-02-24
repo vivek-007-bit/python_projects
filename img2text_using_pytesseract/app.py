@@ -30,11 +30,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # IMAGE PREPROCESSING 
 def preprocess_image(path):
-    """
-    Reduce dimensionality + improve handwriting OCR.
-    Prevents Render timeout & memory crash.
-    """
-
     img = cv2.imread(path)
 
     if img is None:
@@ -119,3 +114,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 10000))
     )
+
