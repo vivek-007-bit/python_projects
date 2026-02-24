@@ -66,10 +66,10 @@
             }
 
             function copyText() {
-                const textInput = document.getElementById("copyText");
+                const extractedText = document.getElementById("extractedText");
                 const message = document.getElementById("message");
             
-                navigator.clipboard.writeText(textInput.value)
+                navigator.clipboard.writeText(extractedText.value)
                     .then(() => {
                         message.innerText = "Copied to clipboard!";
                     })
@@ -83,5 +83,6 @@
 
 
 </html>
+
 
 
