@@ -39,12 +39,17 @@
         <div class="card-body">
             <div>
                 <h5 class="card-title">Extracted Text</h5>
+                    <button class="btn btn-primary" onclick="copyText()">
+                        Copy
+                    </button>
+                
                 <div class="mb-3">
                     <label for="exampleFormControlTextarea1" class="form-label"></label>
                     <textarea class="form-control" id="extractedText"
-                        rows="6">{{ extracted_text }}</textarea>
+                        rows="8">{{ extracted_text }}</textarea>
                 </div>
             </div>
+            <p id="message" class="mt-2 text-success"></p>
             <button type="button" class="btn btn-danger mt-3" onclick="clearText()">
                 Clear Text
             </button>
@@ -59,9 +64,24 @@
             function clearText() {
                 document.getElementById("extractedText").value = "";
             }
+
+            function copyText() {
+                const textInput = document.getElementById("copyText");
+                const message = document.getElementById("message");
+            
+                navigator.clipboard.writeText(textInput.value)
+                    .then(() => {
+                        message.innerText = "Copied to clipboard!";
+                    })
+                    .catch(err => {
+                        message.innerText = "Failed to copy!";
+                        console.error(err);
+                    });
+            }
         </script>
 </body>
 
 
 </html>
+
 
