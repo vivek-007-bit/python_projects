@@ -4,6 +4,7 @@ from PIL import Image
 import os
 import uuid
 import shutil
+import time
 
 app = Flask(__name__)
 
@@ -31,8 +32,11 @@ def preprocess_image(image_path):
 @app.route("/", methods=["GET", "POST"])
 def home():
     extracted_text = None
+    processing_time = None
 
     if request.method == "POST":
+        start_time = time.perf_counter()
+
         file = request.files.get("image")
 
         if file and file.filename != "":
@@ -60,13 +64,16 @@ def home():
                 if os.path.exists(filepath):
                     os.remove(filepath)
 
+        end_time = time.perf_counter()
+        processing_time = round(end_time - start_time, 2)
+
+        print(f"Task completed in {processing_time} seconds")
+
     return render_template(
         "index.html",
-        extracted_text=extracted_text
+        extracted_text=extracted_text,
+        processing_time=processing_time
     )
 
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000))
-    )
+    app.run()
