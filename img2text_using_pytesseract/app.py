@@ -8,13 +8,13 @@ import shutil
 import time
 
 os.environ["OMP_THREAD_LIMIT"] = "1"
+
 cv2.setUseOptimized(True)
 cv2.setNumThreads(1)
 
 app = Flask(__name__)
 
 tesseract_path = shutil.which("tesseract")
-
 if tesseract_path:
     pytesseract.pytesseract.tesseract_cmd = tesseract_path
 else:
@@ -29,51 +29,58 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-def crop_text_region(binary_img):
-    coords = cv2.findNonZero(255 - binary_img)
+def crop_text_region(binary):
+    inv = 255 - binary
+    coords = cv2.findNonZero(inv)
 
     if coords is None:
-        return binary_img
+        return binary
 
     x, y, w, h = cv2.boundingRect(coords)
 
-    padding = 10
-    x = max(0, x - padding)
-    y = max(0, y - padding)
+    pad = 10
+    x = max(0, x - pad)
+    y = max(0, y - pad)
 
-    return binary_img[y:y + h + padding, x:x + w + padding]
+    return binary[y:y + h + pad, x:x + w + pad]
+
 
 def enhance_strokes(gray):
-
-    laplacian = cv2.Laplacian(gray, cv2.CV_16S, ksize=3)
-    sharp = cv2.convertScaleAbs(gray - 0.7 * laplacian)
-
+    lap = cv2.Laplacian(gray, cv2.CV_16S, ksize=3)
+    lap = cv2.convertScaleAbs(lap)
+    sharp = cv2.addWeighted(gray, 1.3, lap, -0.3, 0)
     return sharp
 
-def preprocess_image(image_path):
-    img = cv2.imread(image_path)
 
-    if img is None:
-        raise ValueError("Image could not be loaded")
-
+def normalize_size(img):
     h, w = img.shape[:2]
     max_side = 700
-    scale = max_side / max(h, w)
 
+    scale = max_side / max(h, w)
     if scale < 1:
         img = cv2.resize(
             img,
             (int(w * scale), int(h * scale)),
             interpolation=cv2.INTER_AREA
         )
+    return img
+
+
+def preprocess_image(image_path):
+    img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError("Image could not be loaded")
+
+    img = normalize_size(img)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     bg = cv2.GaussianBlur(gray, (31, 31), 0)
-    corrected = cv2.divide(gray, bg, scale=255)
+    illumination_corrected = cv2.divide(gray, bg, scale=255)
 
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(corrected)
+    enhanced = clahe.apply(illumination_corrected)
+
     enhanced = enhance_strokes(enhanced)
 
     noise_score = cv2.Laplacian(enhanced, cv2.CV_64F).var()
@@ -120,18 +127,14 @@ def preprocess_image(image_path):
 
 
 def build_tesseract_config(mode):
-    if mode == "handwritten":
-        psm = 4
-    else:
-        psm = 6
+    psm = 4 if mode == "handwritten" else 6
 
-    config = (
+    return (
         f"--oem 1 --psm {psm} "
         "-c load_system_dawg=0 "
-        "-c load_freq_dawg=0"
+        "-c load_freq_dawg=0 "
+        "-c preserve_interword_spaces=1"
     )
-
-    return config
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -144,7 +147,7 @@ def home():
 
         file = request.files.get("image")
 
-        if file and file.filename != "":
+        if file and file.filename:
             filename = f"{uuid.uuid4().hex}_{file.filename}"
             filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
@@ -172,9 +175,7 @@ def home():
                 if os.path.exists(filepath):
                     os.remove(filepath)
 
-        end_time = time.perf_counter()
-        processing_time = round(end_time - start_time, 2)
-
+        processing_time = round(time.perf_counter() - start_time, 2)
         print(f"Task completed in {processing_time} seconds")
 
     return render_template(
@@ -183,12 +184,14 @@ def home():
         processing_time=processing_time
     )
 
+
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         debug=False
     )
+
 
 
 
