@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Image2Text | Convert image to editable text</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/logo.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 </head>
@@ -39,9 +40,12 @@
         <div class="card-body">
             <div>
                 <h5 class="card-title">Extracted Text</h5>
+                <div class="card-body-right">
+                    <span class="badge text-bg-warning">Time: 14s</span>
                     <button class="btn btn-primary" onclick="copyText()">
                         Copy
                     </button>
+                </div>
                 
                 <div class="mb-3">
                     <label for="exampleFormControlTextarea1" class="form-label"></label>
@@ -50,7 +54,7 @@
                 </div>
             </div>
             <p id="message" class="mt-2 text-success"></p>
-            <button type="button" class="btn btn-danger mt-3" onclick="clearText()">
+            <button type="button" class="btn btn-danger ms-auto" onclick="clearText()">
                 Clear Text
             </button>
         </div>
@@ -83,6 +87,5 @@
 
 
 </html>
-
 
 
