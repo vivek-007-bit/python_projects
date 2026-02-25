@@ -7,6 +7,7 @@ import uuid
 import shutil
 import time
 
+os.environ["OMP_THREAD_LIMIT"] = "1"
 cv2.setUseOptimized(True)
 cv2.setNumThreads(1)
 
@@ -28,16 +29,29 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-def preprocess_image(image_path):
+def crop_text_region(binary_img):
+    coords = cv2.findNonZero(255 - binary_img)
 
+    if coords is None:
+        return binary_img
+
+    x, y, w, h = cv2.boundingRect(coords)
+
+    padding = 10
+    x = max(0, x - padding)
+    y = max(0, y - padding)
+
+    return binary_img[y:y + h + padding, x:x + w + padding]
+
+
+def preprocess_image(image_path):
     img = cv2.imread(image_path)
 
     if img is None:
         raise ValueError("Image could not be loaded")
 
-    #Resize image
     h, w = img.shape[:2]
-    max_side = 850
+    max_side = 700
     scale = max_side / max(h, w)
 
     if scale < 1:
@@ -47,18 +61,14 @@ def preprocess_image(image_path):
             interpolation=cv2.INTER_AREA
         )
 
-    #Grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    #Illumination correction
     bg = cv2.GaussianBlur(gray, (31, 31), 0)
     corrected = cv2.divide(gray, bg, scale=255)
 
-    #CLAHE contrast
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(corrected)
 
-    #Noise estimation
     noise_score = cv2.Laplacian(enhanced, cv2.CV_64F).var()
 
     if noise_score < 35:
@@ -66,7 +76,6 @@ def preprocess_image(image_path):
     else:
         processed = cv2.GaussianBlur(enhanced, (3, 3), 0)
 
-    #Detect handwriting vs printed 
     variance = processed.std()
 
     if variance < 48:
@@ -98,18 +107,19 @@ def preprocess_image(image_path):
         kernel = np.ones((2, 2), np.uint8)
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
 
+    thresh = crop_text_region(thresh)
+
     return thresh, mode
 
 
 def build_tesseract_config(mode):
-
     if mode == "handwritten":
         psm = 4
     else:
         psm = 6
 
     config = (
-        f"--oem 3 --psm {psm} "
+        f"--oem 1 --psm {psm} "
         "-c load_system_dawg=0 "
         "-c load_freq_dawg=0"
     )
@@ -119,18 +129,15 @@ def build_tesseract_config(mode):
 
 @app.route("/", methods=["GET", "POST"])
 def home():
-
     extracted_text = None
     processing_time = None
 
     if request.method == "POST":
-
         start_time = time.perf_counter()
 
         file = request.files.get("image")
 
         if file and file.filename != "":
-
             filename = f"{uuid.uuid4().hex}_{file.filename}"
             filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
@@ -175,5 +182,6 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 10000)),
         debug=False
     )
+
 
 
