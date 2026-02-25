@@ -152,7 +152,7 @@ def home():
                     processed_img,
                     lang="eng",
                     config=config,
-                    timeout=10
+                    timeout=15
                 )
 
             except RuntimeError:
@@ -182,6 +182,7 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 10000)),
         debug=False
     )
+
 
 
 
