@@ -43,6 +43,12 @@ def crop_text_region(binary_img):
 
     return binary_img[y:y + h + padding, x:x + w + padding]
 
+def enhance_strokes(gray):
+
+    laplacian = cv2.Laplacian(gray, cv2.CV_16S, ksize=3)
+    sharp = cv2.convertScaleAbs(gray - 0.7 * laplacian)
+
+    return sharp
 
 def preprocess_image(image_path):
     img = cv2.imread(image_path)
@@ -68,6 +74,7 @@ def preprocess_image(image_path):
 
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(corrected)
+    enhanced = enhance_strokes(enhanced)
 
     noise_score = cv2.Laplacian(enhanced, cv2.CV_64F).var()
 
@@ -182,6 +189,7 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 10000)),
         debug=False
     )
+
 
 
 
