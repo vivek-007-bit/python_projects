@@ -3,12 +3,12 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV OMP_THREAD_LIMIT=1
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
 
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
-    fonts-dejavu-core \
     libgl1 \
     libglib2.0-0 \
     build-essential \
@@ -28,5 +28,4 @@ RUN mkdir -p static/uploads
 
 EXPOSE 10000
 
-CMD ["gunicorn","--workers","1","--threads","2","--timeout","120","--bind","0.0.0.0:10000","app:app"]
-
+CMD ["gunicorn", "--workers", "1", "--threads", "2", "--timeout", "120", "--bind", "0.0.0.0:10000", "app:app"]
