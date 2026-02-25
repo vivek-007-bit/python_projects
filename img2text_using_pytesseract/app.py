@@ -1,10 +1,14 @@
 from flask import Flask, render_template, request
 import pytesseract
-from PIL import Image
+import cv2
+import numpy as np
 import os
 import uuid
 import shutil
 import time
+
+cv2.setUseOptimized(True)
+cv2.setNumThreads(1)
 
 app = Flask(__name__)
 
@@ -23,42 +27,132 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+
 def preprocess_image(image_path):
-    img = Image.open(image_path)
-    img.thumbnail((1200, 1200))
-    img = img.convert("L")
-    return img
+
+    img = cv2.imread(image_path)
+
+    if img is None:
+        raise ValueError("Image could not be loaded")
+
+    #Resize image
+    h, w = img.shape[:2]
+    max_side = 850
+    scale = max_side / max(h, w)
+
+    if scale < 1:
+        img = cv2.resize(
+            img,
+            (int(w * scale), int(h * scale)),
+            interpolation=cv2.INTER_AREA
+        )
+
+    #Grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    #Illumination correction
+    bg = cv2.GaussianBlur(gray, (31, 31), 0)
+    corrected = cv2.divide(gray, bg, scale=255)
+
+    #CLAHE contrast
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(corrected)
+
+    #Noise estimation
+    noise_score = cv2.Laplacian(enhanced, cv2.CV_64F).var()
+
+    if noise_score < 35:
+        processed = cv2.fastNlMeansDenoising(enhanced, None, 12, 7, 21)
+    else:
+        processed = cv2.GaussianBlur(enhanced, (3, 3), 0)
+
+    #Detect handwriting vs printed 
+    variance = processed.std()
+
+    if variance < 48:
+        mode = "handwritten"
+
+        thresh = cv2.adaptiveThreshold(
+            processed,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV,
+            31,
+            10
+        )
+
+        kernel = np.ones((2, 2), np.uint8)
+        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        thresh = cv2.bitwise_not(thresh)
+
+    else:
+        mode = "printed"
+
+        _, thresh = cv2.threshold(
+            processed,
+            0,
+            255,
+            cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+
+        kernel = np.ones((2, 2), np.uint8)
+        thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+
+    return thresh, mode
+
+
+def build_tesseract_config(mode):
+
+    if mode == "handwritten":
+        psm = 4
+    else:
+        psm = 6
+
+    config = (
+        f"--oem 3 --psm {psm} "
+        "-c load_system_dawg=0 "
+        "-c load_freq_dawg=0"
+    )
+
+    return config
+
 
 @app.route("/", methods=["GET", "POST"])
 def home():
+
     extracted_text = None
     processing_time = None
 
     if request.method == "POST":
+
         start_time = time.perf_counter()
 
         file = request.files.get("image")
 
         if file and file.filename != "":
+
             filename = f"{uuid.uuid4().hex}_{file.filename}"
             filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
             file.save(filepath)
 
             try:
-                img = preprocess_image(filepath)
+                processed_img, mode = preprocess_image(filepath)
+
+                config = build_tesseract_config(mode)
 
                 extracted_text = pytesseract.image_to_string(
-                    img,
-                    config="--psm 6",
-                    timeout=20
+                    processed_img,
+                    lang="eng",
+                    config=config,
+                    timeout=10
                 )
 
             except RuntimeError:
-                extracted_text = "Processing took too long. Try a smaller image."
+                extracted_text = "Processing timeout. Try smaller image."
 
             except Exception as e:
-                extracted_text = f"Error processing image: {str(e)}"
+                extracted_text = f"Error: {str(e)}"
 
             finally:
                 if os.path.exists(filepath):
@@ -81,4 +175,5 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 10000)),
         debug=False
     )
+
 
