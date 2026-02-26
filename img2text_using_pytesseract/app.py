@@ -29,6 +29,20 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
+def normalize_size(img):
+    h, w = img.shape[:2]
+    max_side = 1100
+
+    scale = max_side / max(h, w)
+    if scale < 1:
+        img = cv2.resize(
+            img,
+            (int(w * scale), int(h * scale)),
+            interpolation=cv2.INTER_AREA
+        )
+    return img
+
+
 def crop_text_region(binary):
     inv = 255 - binary
     coords = cv2.findNonZero(inv)
@@ -45,27 +59,6 @@ def crop_text_region(binary):
     return binary[y:y + h + pad, x:x + w + pad]
 
 
-def enhance_strokes(gray):
-    lap = cv2.Laplacian(gray, cv2.CV_16S, ksize=3)
-    lap = cv2.convertScaleAbs(lap)
-    sharp = cv2.addWeighted(gray, 1.3, lap, -0.3, 0)
-    return sharp
-
-
-def normalize_size(img):
-    h, w = img.shape[:2]
-    max_side = 700
-
-    scale = max_side / max(h, w)
-    if scale < 1:
-        img = cv2.resize(
-            img,
-            (int(w * scale), int(h * scale)),
-            interpolation=cv2.INTER_AREA
-        )
-    return img
-
-
 def preprocess_image(image_path):
     img = cv2.imread(image_path)
     if img is None:
@@ -75,39 +68,27 @@ def preprocess_image(image_path):
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    bg = cv2.GaussianBlur(gray, (31, 31), 0)
-    illumination_corrected = cv2.divide(gray, bg, scale=255)
+    bg = cv2.GaussianBlur(gray, (21, 21), 0)
+    gray = cv2.addWeighted(gray, 1.5, bg, -0.5, 0)
 
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(illumination_corrected)
+    enhanced = clahe.apply(gray)
 
-    enhanced = enhance_strokes(enhanced)
-
-    noise_score = cv2.Laplacian(enhanced, cv2.CV_64F).var()
-
-    if noise_score < 35:
-        processed = cv2.fastNlMeansDenoising(enhanced, None, 12, 7, 21)
-    else:
-        processed = cv2.GaussianBlur(enhanced, (3, 3), 0)
+    processed = cv2.GaussianBlur(enhanced, (3, 3), 0)
 
     variance = processed.std()
 
-    if variance < 48:
+    if variance < 45:
         mode = "handwritten"
 
         thresh = cv2.adaptiveThreshold(
             processed,
             255,
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY_INV,
-            31,
-            10
+            cv2.THRESH_BINARY,
+            25,
+            8
         )
-
-        kernel = np.ones((2, 2), np.uint8)
-        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-        thresh = cv2.bitwise_not(thresh)
-
     else:
         mode = "printed"
 
@@ -118,10 +99,17 @@ def preprocess_image(image_path):
             cv2.THRESH_BINARY + cv2.THRESH_OTSU
         )
 
-        kernel = np.ones((2, 2), np.uint8)
-        thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-
     thresh = crop_text_region(thresh)
+
+    thresh = cv2.copyMakeBorder(
+        thresh,
+        10,
+        10,
+        10,
+        10,
+        cv2.BORDER_CONSTANT,
+        value=255
+    )
 
     return thresh, mode
 
@@ -191,9 +179,3 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 10000)),
         debug=False
     )
-
-
-
-
-
-
